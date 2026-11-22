@@ -113,7 +113,7 @@ const readingTime = (text) => Math.max(1, Math.round(text.split(/\s+/).length / 
 /* ---------------- layout ---------------- */
 
 // Changes whenever style.css changes, so browsers never mix a new page with an old cached stylesheet.
-const cssVersion = () => crypto.createHash("sha1").update(fs.readFileSync(path.join(ROOT, "src/style.css"))).digest("hex").slice(0, 8);
+const version = (file) => crypto.createHash("sha1").update(fs.readFileSync(path.join(ROOT, "src", file))).digest("hex").slice(0, 8);
 
 function layout(cfg, { title, description, body, path: p, active, type = "website", image, date, rail = "" }) {
   const url = cfg.url.replace(/\/$/, "") + p;
@@ -134,7 +134,9 @@ function layout(cfg, { title, description, body, path: p, active, type = "websit
 <link rel="canonical" href="${url}">
 <link rel="alternate" type="application/rss+xml" title="${esc(cfg.name)}" href="/feed.xml">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/style.css?v=${cssVersion()}">
+<link rel="stylesheet" href="/style.css?v=${version("style.css")}">
+<script src="/site.js?v=${version("site.js")}" defer></script>
+<script>addEventListener("pagereveal", (e) => { if (e.viewTransition) document.documentElement.classList.add("vt"); });</script>
 <meta property="og:type" content="${type}">
 <meta property="og:site_name" content="${esc(cfg.name)}">
 <meta property="og:title" content="${esc(title || cfg.name)}">
@@ -150,20 +152,13 @@ ${date ? `<meta property="article:published_time" content="${date}">\n<meta name
     <a href="/about/"${active === "about" ? ' aria-current="page"' : ""}>About</a>
     <a href="${cfg.linkedin}" target="_blank" rel="noopener">LinkedIn</a>
     <a href="/feed.xml">RSS</a>
+    <button class="sound" type="button" aria-pressed="true" hidden>Sound</button>
   </nav>
 ${rail}
   <main class="main" id="main">
 ${body}
   </main>
 </div>
-<script>
-  // "7 months ago" on hover, like the design; computed in the reader's browser so it never goes stale.
-  for (const t of document.querySelectorAll("time[data-ago]")) {
-    const days = Math.round((Date.now() - new Date(t.dateTime + "T00:00:00")) / 864e5);
-    const [n, u] = days < 1 ? [0, "today"] : days < 30 ? [days, "day"] : days < 365 ? [Math.round(days / 30.4), "month"] : [Math.round(days / 365), "year"];
-    t.querySelector(".ago").textContent = n ? n + " " + u + (n > 1 ? "s" : "") + " ago" : "today";
-  }
-</script>
 </body>
 </html>
 `;
@@ -244,6 +239,7 @@ function build() {
 
   if (fs.existsSync(STATIC)) fs.cpSync(STATIC, OUT, { recursive: true });
   fs.copyFileSync(path.join(ROOT, "src/style.css"), path.join(OUT, "style.css"));
+  fs.copyFileSync(path.join(ROOT, "src/site.js"), path.join(OUT, "site.js"));
 
   const posts = fs
     .readdirSync(POSTS)
@@ -264,7 +260,7 @@ function build() {
     const [y, m, d] = p.date.split("-");
     const body = `<article>
   <header class="article-head">
-    <p class="meta"><time datetime="${p.date}">${m} ${d} <span>${y}</span></time></p>
+    <p class="meta"><time class="odo" datetime="${p.date}">${m} ${d} <span>${y}</span></time></p>
     <h1>${esc(p.title)}</h1>
     ${p.description ? `<p class="lede">${esc(p.description)}</p>` : ""}
   </header>
@@ -302,9 +298,21 @@ ${p.html}
     </a></li>`;
     })
     .join("\n");
-  const years = [...seen];
-  const rail = `  <nav class="years" aria-label="Years">
-${years.map((y, i) => `    <a href="#y${y}"${i === 0 ? ' aria-current="true"' : ""}>${y}</a>`).join("\n")}
+  // The dial: one tick per post, a year label where each year begins.
+  const ticks = posts
+    .map((p, i) => {
+      const y = p.date.slice(0, 4);
+      const starts = i === 0 || posts[i - 1].date.slice(0, 4) !== y;
+      return `      <span class="tick${starts ? " tick--major" : ""}" style="--i:${i}"></span>${
+        starts ? `\n      <a class="yr" href="#y${y}" style="--i:${i}">${y}</a>` : ""
+      }`;
+    })
+    .join("\n");
+  const rail = `  <nav class="dial" aria-label="Years" style="--n:${posts.length}">
+    <div class="dial-strip">
+${ticks}
+    </div>
+    <span class="dial-pointer" aria-hidden="true"></span>
   </nav>`;
 
   write(
@@ -382,6 +390,7 @@ build();
 /* ---------------- dev server ---------------- */
 
 if (process.argv.includes("--serve")) {
+  const PORT = Number(process.argv[process.argv.indexOf("--port") + 1]) || 4000;
   const types = { ".html": "text/html", ".css": "text/css", ".xml": "application/xml", ".svg": "image/svg+xml",
     ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".woff2": "font/woff2" };
   http
@@ -393,7 +402,7 @@ if (process.argv.includes("--serve")) {
       res.writeHead(200, { "Content-Type": types[path.extname(p)] || "application/octet-stream" });
       fs.createReadStream(p).pipe(res);
     })
-    .listen(4000, () => console.log("Serving on http://localhost:4000"));
+    .listen(PORT, () => console.log(`Serving on http://localhost:${PORT}`));
 
   let t;
   for (const dir of [POSTS, PAGES, path.join(ROOT, "src"), STATIC]) {
