@@ -1,7 +1,7 @@
 // Small enhancements; the site reads fine without any of this.
 //  1. Relative dates ("4 days ago") revealed on hover.
 //  2. The dial: a graduated rail that turns as you move from one post to the next,
-//     with a soft mechanical click per detent.
+//     with a light vibration per detent on devices that have a motor.
 //  3. Article dates that roll into place like a dial on load.
 
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -50,41 +50,12 @@ for (const t of document.querySelectorAll("time[data-ago]")) {
   t.querySelector(".ago").textContent = n ? `${n} ${u}${n > 1 ? "s" : ""} ago` : "today";
 }
 
-/* ---------- sound: a synthesized detent click ---------- */
+/* ---------- haptics: a light pulse per detent ----------
+   Android and other browsers with the Vibration API use navigator.vibrate.
+   iPhone Safari has no Vibration API; since iOS 18, toggling a native switch
+   control gives a light system tap, so we flip a hidden one instead. */
 
-const Sound = (() => {
-  // Always on: clicks start after the reader's first tap, click or key press.
-  let ctx = null;
-
-  // Browsers only allow audio after a real gesture. iPhone Safari counts the
-  // *end* of a tap (touchend / click), not touchstart, so listen to all of them.
-  // Each gesture also nudges a suspended or "interrupted" context back to life.
-  const unlock = () => {
-    try {
-      if (!ctx) {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (!AC) return;
-        ctx = new AC();
-      }
-      if (ctx.state !== "running") ctx.resume?.();
-      // older iOS only unlocks once something has actually played inside the gesture
-      if (!unlock.primed) {
-        const src = ctx.createBufferSource();
-        src.buffer = ctx.createBuffer(1, 1, 22050);
-        src.connect(ctx.destination);
-        src.start(0);
-        unlock.primed = true;
-      }
-    } catch {}
-  };
-  for (const ev of ["pointerdown", "pointerup", "mousedown", "touchstart", "touchend", "click", "keydown"]) {
-    addEventListener(ev, unlock, { passive: true, capture: true });
-  }
-
-  /* Haptics: a short pulse on any device with a vibration motor.
-     Android and other browsers with the Vibration API use navigator.vibrate.
-     iPhone Safari has no Vibration API; since iOS 18, toggling a native switch
-     control gives a light system tap, so we flip a hidden one instead. */
+const Haptics = (() => {
   const iosTap = (() => {
     if ("vibrate" in navigator) return null;
     const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
@@ -102,7 +73,11 @@ const Sound = (() => {
     return () => label.click();
   })();
 
-  function buzz() {
+  let last = 0;
+  function tick() {
+    const t = performance.now();
+    if (t - last < 28) return; // distinct detents, never a buzz
+    last = t;
     // Browsers refuse vibration until the reader has tapped or clicked once.
     if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
     try {
@@ -110,50 +85,7 @@ const Sound = (() => {
       else iosTap?.();
     } catch {}
   }
-
-  let lastTick = 0;
-  function click(strength = 1) {
-    const t = performance.now();
-    if (t - lastTick < 28) return; // never a buzz, always distinct detents
-    lastTick = t;
-
-    buzz();
-
-    if (!ctx || ctx.state !== "running") return;
-    const now = ctx.currentTime;
-
-    const out = ctx.createGain();
-    out.gain.value = 0.13 * strength; // ≈5 dB under the first version: softer, still clearly audible
-    out.connect(ctx.destination);
-
-    // the "tick": a 4ms burst of filtered noise, crisp and dry
-    const len = Math.floor(ctx.sampleRate * 0.004);
-    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 5);
-    const noise = ctx.createBufferSource();
-    noise.buffer = buf;
-    const bp = ctx.createBiquadFilter();
-    bp.type = "bandpass";
-    bp.frequency.value = 3600 + Math.random() * 400;
-    bp.Q.value = 1.8;
-    noise.connect(bp).connect(out);
-    noise.start(now);
-
-    // the "body": a light knock underneath
-    const osc = ctx.createOscillator();
-    const env = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(1700 + Math.random() * 120, now);
-    osc.frequency.exponentialRampToValueAtTime(850, now + 0.014);
-    env.gain.setValueAtTime(0.3, now);
-    env.gain.exponentialRampToValueAtTime(0.001, now + 0.018);
-    osc.connect(env).connect(out);
-    osc.start(now);
-    osc.stop(now + 0.024);
-  }
-
-  return { click };
+  return { tick };
 })();
 
 /* ---------- 2. the dial ---------- */
@@ -198,8 +130,7 @@ if (dial && rows.length) {
     dial.style.setProperty("--pos", pos.toFixed(3));
     const near = Math.round(pos);
     if (near !== detent) {
-      const steps = Math.abs(near - detent);
-      if (detent !== -1) Sound.click(steps > 1 ? 1.1 : 1);
+      if (detent !== -1) Haptics.tick();
       detent = near;
       rows.forEach((r, i) => r.classList.toggle("is-active", i === near));
       ticks.forEach((t, i) => t.classList.toggle("is-active", i === near));
