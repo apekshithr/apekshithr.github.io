@@ -152,7 +152,6 @@ ${date ? `<meta property="article:published_time" content="${date}">\n<meta name
     <a href="/about/"${active === "about" ? ' aria-current="page"' : ""}>About</a>
     <a href="${cfg.linkedin}" target="_blank" rel="noopener">LinkedIn</a>
     <a href="/feed.xml">RSS</a>
-    <button class="sound" type="button" aria-pressed="true" hidden>Sound</button>
   </nav>
 ${rail}
   <main class="main" id="main">

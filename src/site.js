@@ -36,24 +36,7 @@ const Roll = (() => {
   };
   const init = (el) => { el.classList.add("rolls"); build(el, el.textContent.trim()); };
 
-  // Change the label itself (Sound on → Sound off) with the same roll.
-  const to = (el, next) => {
-    const now = el.querySelector(".visually-hidden")?.textContent ?? el.textContent;
-    if (now === next) return;
-    if (reduce) return build(el, next);
-    el.classList.remove("rolls");
-    build(el, now, next);
-    el.classList.add("is-switching");
-    void el.offsetWidth; // commit the starting position, then roll
-    el.classList.add("is-switched");
-    clearTimeout(el._t);
-    el._t = setTimeout(() => {
-      el.classList.remove("is-switching", "is-switched");
-      build(el, next);
-      el.classList.add("rolls");
-    }, 700);
-  };
-  return { init, to };
+  return { init };
 })();
 
 for (const el of document.querySelectorAll(".nav a, .article-foot a")) Roll.init(el);
@@ -70,10 +53,7 @@ for (const t of document.querySelectorAll("time[data-ago]")) {
 /* ---------- sound: a synthesized detent click ---------- */
 
 const Sound = (() => {
-  // On by default. Only a reader who turns it off gets it off (remembered per browser).
-  const KEY = "dial-sound-v2";
-  let on = true;
-  try { on = localStorage.getItem(KEY) !== "off"; } catch {}
+  // Always on: clicks start after the reader's first tap, click or key press.
   let ctx = null;
 
   // Browsers only allow audio after a real gesture (click, tap, key).
@@ -118,7 +98,6 @@ const Sound = (() => {
 
   let lastTick = 0;
   function click(strength = 1) {
-    if (!on) return;
     const t = performance.now();
     if (t - lastTick < 28) return; // never a buzz, always distinct detents
     lastTick = t;
@@ -157,24 +136,6 @@ const Sound = (() => {
     osc.connect(env).connect(out);
     osc.start(now);
     osc.stop(now + 0.02);
-  }
-
-  // The nav toggle
-  const btn = document.querySelector(".sound");
-  if (btn) {
-    const paint = (animate) => {
-      btn.setAttribute("aria-pressed", String(on));
-      const label = on ? "Sound on" : "Sound off";
-      animate ? Roll.to(btn, label) : (btn.textContent = label, Roll.init(btn));
-    };
-    btn.hidden = false;
-    paint(false);
-    btn.addEventListener("click", () => {
-      on = !on;
-      try { localStorage.setItem(KEY, on ? "on" : "off"); } catch {}
-      paint(true);
-      if (on) { unlock(); setTimeout(() => click(1.2), 30); }
-    });
   }
 
   return { click };
