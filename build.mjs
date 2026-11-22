@@ -108,13 +108,11 @@ function markdown(src) {
 
 const fmtDate = (d) =>
   new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-const shortDate = (d) =>
-  new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 const readingTime = (text) => Math.max(1, Math.round(text.split(/\s+/).length / 230));
 
 /* ---------------- layout ---------------- */
 
-function layout(cfg, { title, description, body, path: p, active, type = "website", image, date }) {
+function layout(cfg, { title, description, body, path: p, active, type = "website", image, date, rail = "" }) {
   const url = cfg.url.replace(/\/$/, "") + p;
   const fullTitle = title ? `${title} — ${cfg.name}` : `${cfg.name} · ${cfg.title}`;
   const img = image ? (image.startsWith("http") ? image : cfg.url.replace(/\/$/, "") + image) : "";
@@ -129,7 +127,7 @@ function layout(cfg, { title, description, body, path: p, active, type = "websit
 <meta name="theme-color" content="#ffffff">
 <meta name="color-scheme" content="light">
 <link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="/fonts/newsreader-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/oswald-500-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="canonical" href="${url}">
 <link rel="alternate" type="application/rss+xml" title="${esc(cfg.name)}" href="/feed.xml">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -142,29 +140,27 @@ function layout(cfg, { title, description, body, path: p, active, type = "websit
 ${img ? `<meta property="og:image" content="${img}">\n<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="627">\n<meta name="twitter:card" content="summary_large_image">` : `<meta name="twitter:card" content="summary">`}
 ${date ? `<meta property="article:published_time" content="${date}">\n<meta name="author" content="${esc(cfg.name)}">` : ""}
 </head>
-<body>
-<header class="site-header">
-  <div class="wrap">
-    <a class="brand" href="/">${esc(cfg.name)}</a>
-    <nav class="nav">
-      <a href="/"${active === "home" ? ' aria-current="page"' : ""}>Writing</a>
-      <a href="/about/"${active === "about" ? ' aria-current="page"' : ""}>About</a>
-    </nav>
-  </div>
-</header>
-<main class="wrap">
+<body class="${active === "home" ? "is-home" : "is-read"}">
+<div class="shell">
+  <a class="mark" href="/" aria-label="${esc(cfg.name)}, home">${esc(cfg.mark || cfg.name)}</a>
+  <nav class="nav" aria-label="Site">
+    <a href="/about/"${active === "about" ? ' aria-current="page"' : ""}>About</a>
+    <a href="${cfg.linkedin}" target="_blank" rel="noopener">LinkedIn</a>
+    <a href="/feed.xml">RSS</a>
+  </nav>
+${rail}
+  <main class="main" id="main">
 ${body}
-</main>
-<footer class="site-footer">
-  <div class="wrap">
-    <span>© ${year} ${esc(cfg.name)}</span>
-    <span class="links">
-      <a href="${cfg.linkedin}" target="_blank" rel="noopener">LinkedIn</a>
-      <a href="mailto:${cfg.email}">Email</a>
-      <a href="/feed.xml">RSS</a>
-    </span>
-  </div>
-</footer>
+  </main>
+</div>
+<script>
+  // "7 months ago" on hover, like the design; computed in the reader's browser so it never goes stale.
+  for (const t of document.querySelectorAll("time[data-ago]")) {
+    const days = Math.round((Date.now() - new Date(t.dateTime + "T00:00:00")) / 864e5);
+    const [n, u] = days < 1 ? [0, "today"] : days < 30 ? [days, "day"] : days < 365 ? [Math.round(days / 30.4), "month"] : [Math.round(days / 365), "year"];
+    t.querySelector(".ago").textContent = n ? n + " " + u + (n > 1 ? "s" : "") + " ago" : "today";
+  }
+</script>
 </body>
 </html>
 `;
@@ -192,15 +188,15 @@ function cardHtml(cfg, title, kicker) {
   const font = (f) => `file://${path.join(STATIC, "fonts", f)}`;
   return `<!doctype html><html><head><meta charset="utf-8"><style>
 @font-face{font-family:Inter;font-weight:400 600;src:url("${font("inter-latin.woff2")}")}
+@font-face{font-family:Oswald;font-weight:500;src:url("${font("oswald-500-latin.woff2")}")}
 *{margin:0;box-sizing:border-box}
-html,body{width:1200px;height:627px;background:#fff;color:#1d1d1f;overflow:hidden}
-body{font-family:-apple-system,"SF Pro Display",Inter,sans-serif;padding:80px 96px;display:flex;flex-direction:column;justify-content:space-between;-webkit-font-smoothing:antialiased}
-.top{display:flex;align-items:center;gap:14px;font-size:26px;font-weight:600;letter-spacing:-.01em}
-.dot{width:18px;height:18px;border-radius:50%;background:#1d1d1f}
-h1{font-size:${title.length > 48 ? 64 : 80}px;line-height:1.04;font-weight:600;letter-spacing:-.034em;max-width:960px;text-wrap:balance}
-p{font-size:26px;color:#6e6e73;letter-spacing:-.012em}
+html,body{width:1200px;height:627px;background:#fff;color:#111;overflow:hidden}
+body{font-family:Inter,sans-serif;padding:84px 96px;display:flex;flex-direction:column;justify-content:space-between;-webkit-font-smoothing:antialiased}
+.mark{font-family:Oswald,sans-serif;font-weight:500;font-size:30px;letter-spacing:.02em}
+h1{font-size:${title.length > 48 ? 58 : 72}px;line-height:1.12;font-weight:400;letter-spacing:-.02em;max-width:980px;text-wrap:balance}
+p{font-size:24px;color:#767676}
 </style></head><body>
-<div class="top"><span class="dot"></span>${esc(cfg.name)}</div>
+<div class="mark">${esc(cfg.mark || cfg.name)}</div>
 <h1>${esc(title)}</h1>
 <p>${esc(kicker)}</p>
 </body></html>`;
@@ -262,9 +258,10 @@ function build() {
     const shareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(
       cfg.url.replace(/\/$/, "") + `/${p.slug}/`
     )}`;
+    const [y, m, d] = p.date.split("-");
     const body = `<article>
   <header class="article-head">
-    <p class="meta"><span><time datetime="${p.date}">${fmtDate(p.date)}</time></span><span>${p.minutes} min read</span></p>
+    <p class="meta"><time datetime="${p.date}">${m} ${d} <span>${y}</span></time></p>
     <h1>${esc(p.title)}</h1>
     ${p.description ? `<p class="lede">${esc(p.description)}</p>` : ""}
   </header>
@@ -272,8 +269,8 @@ function build() {
 ${p.html}
   </div>
   <footer class="article-foot">
-    <a class="back" href="/">← All writing</a>
-    <a class="share" href="${shareUrl}" target="_blank" rel="noopener">Share on LinkedIn</a>
+    <a href="/">All writing</a>
+    <a href="${shareUrl}" target="_blank" rel="noopener">Share on LinkedIn</a>
   </footer>
 </article>`;
     write(
@@ -290,15 +287,22 @@ ${p.html}
     );
   }
 
+  const seen = new Set();
   const list = posts
-    .map(
-      (p) => `    <li><a href="/${p.slug}/">
+    .map((p) => {
+      const [y, m, d] = p.date.split("-");
+      const first = !seen.has(y) && seen.add(y);
+      return `    <li${first ? ` id="y${y}"` : ""}><a href="/${p.slug}/">
+      <time datetime="${p.date}" data-ago><span class="md">${m}-${d}</span><span class="ago" aria-hidden="true"></span></time>
       <span class="title">${esc(p.title)}</span>
-      <time datetime="${p.date}">${shortDate(p.date)}</time>
       ${p.description ? `<span class="desc">${esc(p.description)}</span>` : ""}
-    </a></li>`
-    )
+    </a></li>`;
+    })
     .join("\n");
+  const years = [...seen];
+  const rail = `  <nav class="years" aria-label="Years">
+${years.map((y, i) => `    <a href="#y${y}"${i === 0 ? ' aria-current="true"' : ""}>${y}</a>`).join("\n")}
+  </nav>`;
 
   write(
     "index.html",
@@ -307,14 +311,11 @@ ${p.html}
       path: "/",
       active: "home",
       image: cards[""],
-      body: `<section class="intro">
-  <h1>${esc(cfg.title)}. <span>${esc(cfg.intro)}</span></h1>
-</section>
-<section aria-label="Writing">
-  <ul class="posts">
+      rail,
+      body: `<h1 class="visually-hidden">${esc(cfg.name)} · ${esc(cfg.title)}</h1>
+<ol class="posts" reversed>
 ${list}
-  </ul>
-</section>`,
+</ol>`,
     })
   );
 
