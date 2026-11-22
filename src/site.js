@@ -56,15 +56,30 @@ const Sound = (() => {
   // Always on: clicks start after the reader's first tap, click or key press.
   let ctx = null;
 
-  // Browsers only allow audio after a real gesture (click, tap, key).
+  // Browsers only allow audio after a real gesture. iPhone Safari counts the
+  // *end* of a tap (touchend / click), not touchstart, so listen to all of them.
+  // Each gesture also nudges a suspended or "interrupted" context back to life.
   const unlock = () => {
-    if (!ctx) {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (AC) ctx = new AC();
-    }
-    ctx?.state === "suspended" && ctx.resume();
+    try {
+      if (!ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        ctx = new AC();
+      }
+      if (ctx.state !== "running") ctx.resume?.();
+      // older iOS only unlocks once something has actually played inside the gesture
+      if (!unlock.primed) {
+        const src = ctx.createBufferSource();
+        src.buffer = ctx.createBuffer(1, 1, 22050);
+        src.connect(ctx.destination);
+        src.start(0);
+        unlock.primed = true;
+      }
+    } catch {}
   };
-  for (const ev of ["pointerdown", "keydown", "touchstart"]) addEventListener(ev, unlock, { passive: true });
+  for (const ev of ["pointerdown", "pointerup", "mousedown", "touchstart", "touchend", "click", "keydown"]) {
+    addEventListener(ev, unlock, { passive: true, capture: true });
+  }
 
   /* Haptics: a short pulse on any device with a vibration motor.
      Android and other browsers with the Vibration API use navigator.vibrate.
@@ -108,34 +123,34 @@ const Sound = (() => {
     const now = ctx.currentTime;
 
     const out = ctx.createGain();
-    out.gain.value = 0.07 * strength;
+    out.gain.value = 0.13 * strength; // ≈5 dB under the first version: softer, still clearly audible
     out.connect(ctx.destination);
 
-    // the "tick": a 3ms burst of filtered noise, high and dry
-    const len = Math.floor(ctx.sampleRate * 0.003);
+    // the "tick": a 4ms burst of filtered noise, crisp and dry
+    const len = Math.floor(ctx.sampleRate * 0.004);
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 6);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 5);
     const noise = ctx.createBufferSource();
     noise.buffer = buf;
     const bp = ctx.createBiquadFilter();
     bp.type = "bandpass";
-    bp.frequency.value = 4200 + Math.random() * 500;
-    bp.Q.value = 2.2;
+    bp.frequency.value = 3600 + Math.random() * 400;
+    bp.Q.value = 1.8;
     noise.connect(bp).connect(out);
     noise.start(now);
 
-    // the "body": a faint knock underneath, quieter and shorter than before
+    // the "body": a light knock underneath
     const osc = ctx.createOscillator();
     const env = ctx.createGain();
     osc.type = "sine";
-    osc.frequency.setValueAtTime(1800 + Math.random() * 120, now);
-    osc.frequency.exponentialRampToValueAtTime(900, now + 0.012);
-    env.gain.setValueAtTime(0.18, now);
-    env.gain.exponentialRampToValueAtTime(0.001, now + 0.014);
+    osc.frequency.setValueAtTime(1700 + Math.random() * 120, now);
+    osc.frequency.exponentialRampToValueAtTime(850, now + 0.014);
+    env.gain.setValueAtTime(0.3, now);
+    env.gain.exponentialRampToValueAtTime(0.001, now + 0.018);
     osc.connect(env).connect(out);
     osc.start(now);
-    osc.stop(now + 0.02);
+    osc.stop(now + 0.024);
   }
 
   return { click };
