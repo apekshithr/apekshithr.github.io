@@ -112,6 +112,9 @@ const readingTime = (text) => Math.max(1, Math.round(text.split(/\s+/).length / 
 
 /* ---------------- layout ---------------- */
 
+// Changes whenever style.css changes, so browsers never mix a new page with an old cached stylesheet.
+const cssVersion = () => crypto.createHash("sha1").update(fs.readFileSync(path.join(ROOT, "src/style.css"))).digest("hex").slice(0, 8);
+
 function layout(cfg, { title, description, body, path: p, active, type = "website", image, date, rail = "" }) {
   const url = cfg.url.replace(/\/$/, "") + p;
   const fullTitle = title ? `${title} — ${cfg.name}` : `${cfg.name} · ${cfg.title}`;
@@ -131,7 +134,7 @@ function layout(cfg, { title, description, body, path: p, active, type = "websit
 <link rel="canonical" href="${url}">
 <link rel="alternate" type="application/rss+xml" title="${esc(cfg.name)}" href="/feed.xml">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/style.css?v=${cssVersion()}">
 <meta property="og:type" content="${type}">
 <meta property="og:site_name" content="${esc(cfg.name)}">
 <meta property="og:title" content="${esc(title || cfg.name)}">
